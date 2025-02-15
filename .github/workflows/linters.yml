@@ -5,27 +5,56 @@ on:
   pull_request:
     branches:
     - main
+  workflow_dispatch:
 
 jobs:
   jshint:
     name: Javascript Linter
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Install jshint
+    - uses: actions/checkout@v4
+    - name: Install linters
       run: |
-        sudo npm install -g jshint@2.13.3
+        sudo npm install -g jshint@2.13.6 eslint@8.57.0
     - name: Run jshint
-      run: jshint ui/static/js/*.js
+      run: jshint internal/ui/static/js/*.js
+    - name: Run ESLint
+      run: eslint internal/ui/static/js/*.js
 
   golangci:
-    name: Golang Linter
+    name: Golang Linters
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
-      - uses: golangci/golangci-lint-action@v3
+          go-version: "1.24.x"
+      - uses: golangci/golangci-lint-action@v6
         with:
-          args: --timeout 10m --skip-dirs tests --disable errcheck --enable sqlclosecheck --enable misspell --enable gofmt --enable goimports --enable whitespace
+          args: >
+            --timeout 10m
+            --exclude-dirs=tests
+            --disable errcheck
+            --enable sqlclosecheck,misspell,gofmt,goimports,whitespace,gocritic
+      - uses: dominikh/staticcheck-action@v1.3.1
+        with:
+          version: "latest"
+          install-go: false
+
+  commitlint:
+    name: Commit Linter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+      - name: Install commitlint
+        run: |
+          npm install --save-dev @commitlint/config-conventional @commitlint/cli
+          echo "module.exports = {extends: ['@commitlint/config-conventional']}" > commitlint.config.js
+      - name: Validate PR commits
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
